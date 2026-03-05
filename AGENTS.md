@@ -8,6 +8,8 @@ Acontext is the agent memory stack for production AI Agents
 - API: `src/server/api/`
 - CORE: `src/server/core/`
 - DASHBOARD: `src/server/ui/`
+- OpenClaw Plugin: `src/packages/openclaw/`
+- Sandbox Cloudflare: `src/packages/sandbox-cloudflare/` (template source: `src/server/sandbox/cloudflare/`)
 - Landing Page: `landingpage`
 - Documentation: `docs/`
 
@@ -42,16 +44,22 @@ When your task is about modify API, always look for the revelant SDKs and see it
 ### Sync ORMs between API and CORE
 Both API and CORE have their ORMs, which should be synced. CORE uses SQLAlchemy, API uses GORM.
 ### SDK Version Bump & Tagging
-When releasing a new version of an SDK, follow these steps in order:
+When releasing a new version of an SDK or package, follow these steps in order:
 1. **Bump the version number** in the package manifest:
    - TypeScript SDK: update `"version"` in `src/client/acontext-ts/package.json`
    - Python SDK: update `version` in `src/client/acontext-py/pyproject.toml`
    - OpenClaw Plugin: update `"version"` in `src/packages/openclaw/package.json`
+   - Sandbox Cloudflare: update `"version"` in `src/packages/sandbox-cloudflare/package.json`
 2. **Regenerate the lock file** so it stays in sync:
    - TypeScript SDK: run `npm install` in `src/client/acontext-ts/` (updates `package-lock.json`)
    - Python SDK: run `uv lock` in `src/client/acontext-py/` (updates `uv.lock`)
    - OpenClaw Plugin: run `npm install` in `src/packages/openclaw/` (updates `package-lock.json`)
+   - Sandbox Cloudflare: no lock file needed (template is synced from `src/server/sandbox/cloudflare` via `prepublishOnly` script)
 3. **Commit** the version bump + lock file changes.
-4. **Tag** the commit using the convention `sdk-ts/vX.Y.Z`, `sdk-py/vX.Y.Z`, or `package-openclaw/vX.Y.Z`.
+4. **Tag** the commit using the convention:
+   - `sdk-ts/vX.Y.Z`
+   - `sdk-py/vX.Y.Z`
+   - `package-openclaw/vX.Y.Z`
+   - `package-sandbox-cloudflare/vX.Y.Z`
 ### Unit Test
 - Always delete the new project you created in the same test

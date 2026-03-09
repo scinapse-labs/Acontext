@@ -39,7 +39,7 @@ export function baseOptions(): BaseLayoutProps {
       },
       {
         text: "Blog",
-        url: "https://blog.acontext.io",
+        url: "https://acontext.io/blog",
         icon: <BookIcon />,
       },
       {

@@ -48,6 +48,14 @@ jobs:
       - name: Run lint
         run: pnpm run lint
 
+      - name: Generate .env
+        run: |
+          echo "PAYLOAD_SECRET=$(openssl rand -hex 32)" >> .env
+          echo 'NEXT_PUBLIC_SERVER_URL="http://localhost:3000"' >> .env
+
+      - name: Build
+        run: pnpm run build
+
   test-int:
     runs-on: ubuntu-latest
     timeout-minutes: 20

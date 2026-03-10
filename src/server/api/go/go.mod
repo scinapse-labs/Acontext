@@ -1,6 +1,6 @@
 module github.com/memodb-io/Acontext
 
-go 1.25.7
+go 1.25.8
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.26.0

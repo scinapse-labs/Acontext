@@ -226,15 +226,15 @@ export function Hero() {
             </span>
             <span className="text-muted-foreground/40 hidden sm:inline">·</span>
             <span className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-muted/50 border border-border/50">
-              Markdown Skills
+              Skill-Driven
             </span>
             <span className="text-muted-foreground/40 hidden sm:inline">·</span>
             <span className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-muted/50 border border-border/50">
-              Cross-Session Reuse
+              Self-Learning
             </span>
           </div>
           <p className="text-xs sm:text-sm md:text-base text-muted-foreground/70 leading-relaxed max-w-2xl mx-auto">
-            Captures what works, distills it into Markdown skills, and loads them on the next run.
+            Captures what works, distills it into Agent Skills, and loads them on the next run.
           </p>
         </div>
 

@@ -1,5 +1,6 @@
 export { Header } from './header'
 export { Hero } from './hero'
+export { FlowDiagram } from './flow-diagram'
 export { TutorialVideo } from '../animation/tutorial-animation'
 export { FeaturesOverview } from './overview'
 export { Features } from './features'

@@ -1,5 +1,5 @@
 import Script from 'next/script'
-import { Hero, Features, Quickstart, CommunityCTA, FeaturesOverview, SelfHostCTA } from '@/components/landing'
+import { Hero, FlowDiagram, Features, Quickstart, CommunityCTA, FeaturesOverview, SelfHostCTA } from '@/components/landing'
 import { WithCustomCursor } from '@/components/with-custom-cursor'
 import { createOrganizationJsonLd, createWebSiteJsonLd, generateJsonLdScript } from '@/lib/jsonld'
 
@@ -35,6 +35,7 @@ export default function HomePage() {
         }}
       />
       <Hero />
+      <FlowDiagram />
       {/* Features tabs with custom cursor - colors auto-adapt to theme */}
       <WithCustomCursor
         id="how-it-works"

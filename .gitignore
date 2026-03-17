@@ -2,7 +2,8 @@ plans/
 .claude
 .cursorrules
 .DS_Store
-
+.agents
+skills-lock.json
 # OpenNext Cloudflare Workers
 .open-next/
 .dev.vars

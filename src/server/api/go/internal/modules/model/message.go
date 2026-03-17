@@ -36,6 +36,21 @@ const (
 )
 
 // ---------------------------------------------------------------------------
+// Message task-process status constants
+// ---------------------------------------------------------------------------
+
+type MessageTaskProcessStatus = string
+
+const (
+	MessageStatusPending         MessageTaskProcessStatus = "pending"
+	MessageStatusRunning         MessageTaskProcessStatus = "running"
+	MessageStatusSuccess         MessageTaskProcessStatus = "success"
+	MessageStatusFailed          MessageTaskProcessStatus = "failed"
+	MessageStatusDisableTracking MessageTaskProcessStatus = "disable_tracking"
+	MessageStatusLimitExceed     MessageTaskProcessStatus = "limit_exceed"
+)
+
+// ---------------------------------------------------------------------------
 // Part type constants
 // ---------------------------------------------------------------------------
 
@@ -196,7 +211,7 @@ type Message struct {
 
 	TaskID *uuid.UUID `gorm:"type:uuid;index" json:"task_id"`
 
-	SessionTaskProcessStatus string `gorm:"type:text;not null;default:'pending';check:session_task_process_status IN ('success','failed','running','pending')" json:"session_task_process_status"`
+	SessionTaskProcessStatus string `gorm:"type:text;not null;default:'pending'" json:"session_task_process_status"`
 
 	CreatedAt time.Time `gorm:"autoCreateTime;not null;default:CURRENT_TIMESTAMP;index:idx_session_created,priority:2,sort:desc" json:"created_at"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime;not null;default:CURRENT_TIMESTAMP" json:"updated_at"`

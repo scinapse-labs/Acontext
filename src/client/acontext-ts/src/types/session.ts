@@ -37,6 +37,7 @@ export const MessageSchema = z.object({
   meta: z.record(z.string(), z.unknown()),
   parts: z.array(PartSchema),
   task_id: z.string().nullable(),
+  /** Task process status: 'success' | 'failed' | 'running' | 'pending' | 'disable_tracking' | 'limit_exceed' */
   session_task_process_status: z.string(),
   created_at: z.string(),
   updated_at: z.string(),

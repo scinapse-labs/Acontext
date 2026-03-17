@@ -368,17 +368,19 @@ func (s *sessionService) StoreMessage(ctx context.Context, in StoreMessageInput)
 		Parts:          parts,
 	}
 
-	if err := s.sessionRepo.CreateMessageWithAssets(ctx, &msg); err != nil {
-		return nil, err
-	}
-
 	// Check if task tracking is disabled for this session
 	disableTaskTracking, err := s.sessionRepo.GetDisableTaskTracking(ctx, in.SessionID)
 	if err != nil {
 		s.log.Error("failed to get disable_task_tracking for session", zap.Error(err))
-		// Continue without publishing, but don't fail the request
-	} else if s.publisher != nil && !disableTaskTracking {
-		// Only publish to MQ if task tracking is enabled
+	} else if disableTaskTracking {
+		msg.SessionTaskProcessStatus = model.MessageStatusDisableTracking
+	}
+
+	if err := s.sessionRepo.CreateMessageWithAssets(ctx, &msg); err != nil {
+		return nil, err
+	}
+
+	if !disableTaskTracking && s.publisher != nil {
 		if err := s.publisher.PublishJSON(ctx, s.cfg.RabbitMQ.ExchangeName.SessionMessage, s.cfg.RabbitMQ.RoutingKey.SessionMessageInsert, StoreMQPublishJSON{
 			ProjectID: in.ProjectID,
 			SessionID: in.SessionID,

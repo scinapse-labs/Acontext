@@ -639,7 +639,7 @@ func (r *sessionRepo) HasUnfinishedMessages(ctx context.Context, sessionID uuid.
 func (r *sessionRepo) HasFailedMessages(ctx context.Context, sessionID uuid.UUID) (bool, error) {
 	var exists bool
 	err := r.db.WithContext(ctx).Raw(
-		"SELECT EXISTS(SELECT 1 FROM messages WHERE session_id = ? AND session_task_process_status = 'failed')",
+		"SELECT EXISTS(SELECT 1 FROM messages WHERE session_id = ? AND session_task_process_status IN ('failed', 'limit_exceed'))",
 		sessionID,
 	).Scan(&exists).Error
 	return exists, err

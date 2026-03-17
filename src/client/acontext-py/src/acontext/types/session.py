@@ -162,7 +162,7 @@ class Message(BaseModel):
     task_id: str | None = Field(None, description="Task UUID if associated with a task")
     session_task_process_status: str = Field(
         ...,
-        description="Task process status: 'success', 'failed', 'running', or 'pending'",
+        description="Task process status: 'success', 'failed', 'running', 'pending', 'disable_tracking', or 'limit_exceed'",
     )
     created_at: str = Field(..., description="ISO 8601 formatted creation timestamp")
     updated_at: str = Field(..., description="ISO 8601 formatted update timestamp")

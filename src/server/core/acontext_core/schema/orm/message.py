@@ -61,10 +61,6 @@ class Message(CommonMixin):
             "role IN ('user', 'assistant', 'tool', 'function')",
             name="ck_message_role",
         ),
-        CheckConstraint(
-            "session_task_process_status IN ('success', 'failed', 'running', 'pending')",
-            name="ck_session_task_process_status",
-        ),
         Index("ix_message_session_id", "session_id"),
         Index("ix_message_parent_id", "parent_id"),
         Index("idx_session_created", "session_id", "created_at"),

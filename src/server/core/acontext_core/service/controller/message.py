@@ -39,7 +39,7 @@ async def process_session_pending_message(
                     f"Project {project_id} has disabled new task creation, skip"
                 )
                 await MD.update_message_status_to(
-                    session, pending_message_ids, TaskStatus.FAILED
+                    session, pending_message_ids, TaskStatus.LIMIT_EXCEED
                 )
                 return Result.resolve(None)
             await MD.update_message_status_to(

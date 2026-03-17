@@ -147,7 +147,7 @@ async def poll_message_status(
             "SELECT session_task_process_status FROM messages WHERE id = $1",
             msg_uuid
         )
-        if status in ("success", "failed"):
+        if status in ("success", "failed", "disable_tracking", "limit_exceed"):
             return status
         await asyncio.sleep(poll_interval)
 
@@ -412,6 +412,45 @@ async def test_concurrent_sessions():
     )
     
     logger.info("Concurrency test passed")
+
+
+# ============================================================================
+# Message Status Semantic Tests
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_disable_tracking_message_status(db_conn, test_project):
+    """Test that messages in sessions with disable_task_tracking=true
+    get session_task_process_status='disable_tracking' instead of 'pending'.
+    """
+
+    async with httpx.AsyncClient() as client:
+        # Create session with disable_task_tracking=true
+        session_resp = await client.post(
+            f"{API_URL}/api/v1/session",
+            json={"disable_task_tracking": True},
+            headers=test_project.headers
+        )
+        assert session_resp.status_code in (200, 201), f"Failed to create session: {session_resp.text}"
+        session_id = session_resp.json()["data"]["id"]
+
+        # Send a message
+        message_id = await send_message(
+            client, session_id, "Hello with tracking disabled", test_project.headers
+        )
+
+        # Check status directly in DB — should be 'disable_tracking' immediately
+        # (no MQ publish, so no need to poll)
+        msg_uuid = uuid.UUID(message_id)
+        status = await db_conn.fetchval(
+            "SELECT session_task_process_status FROM messages WHERE id = $1",
+            msg_uuid
+        )
+        assert status == "disable_tracking", (
+            f"Expected 'disable_tracking' for message in tracking-disabled session, got '{status}'"
+        )
+
+        logger.info("Disable tracking message status test passed")
 
 
 # ============================================================================

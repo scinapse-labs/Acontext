@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { encodeId } from "@/lib/id-codec";
 import { useTopNavStore } from "@/stores/top-nav";
@@ -56,9 +56,10 @@ import {
   StickyNote,
   Flag,
   Download,
+  ListFilter,
 } from "lucide-react";
-import { Project, Message, SessionEvent, TimelineItem, Part } from "@/types";
-import { getMessages, sendMessage, getSessionConfigs, downloadMessages } from "../../actions";
+import { Project, Message, SessionEvent, TimelineItem, Part, Task } from "@/types";
+import { getMessages, sendMessage, getSessionConfigs, downloadMessages, getTasks } from "../../actions";
 import { toast } from "sonner";
 import {
   generateTempId,
@@ -78,6 +79,7 @@ interface MessagesPageClientProps {
 }
 
 const PAGE_SIZE = 10;
+const NO_TASK_SENTINEL = "__no_task__";
 
 // Component to render message content parts in table
 const MessageContentPreview = ({
@@ -249,26 +251,39 @@ export function MessagesPageClient({
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
   const [toolResults, setToolResults] = useState<ToolResult[]>([]);
 
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [messagePublicUrls, setMessagePublicUrls] = useState<
     Record<string, { url: string; expire_at: string }>
   >({});
 
-  const timelineItems: TimelineItem[] = [
+  const timelineItems = useMemo(() => [
     ...allMessages.map((m): TimelineItem => ({ kind: 'message', data: m })),
     ...allEvents.map((e): TimelineItem => ({ kind: 'event', data: e })),
-  ].sort((a, b) => new Date(a.data.created_at).getTime() - new Date(b.data.created_at).getTime());
+  ].sort((a, b) => new Date(a.data.created_at).getTime() - new Date(b.data.created_at).getTime()),
+  [allMessages, allEvents]);
 
-  const totalPages = Math.ceil(timelineItems.length / PAGE_SIZE);
-  const paginatedItems = timelineItems.slice(
+  const filteredTimelineItems = useMemo(() => {
+    if (selectedTaskIds.size === 0) return timelineItems;
+    return timelineItems.filter((item) => {
+      if (item.kind === 'event') return true;
+      const msg = item.data as Message;
+      if (!msg.task_id) return selectedTaskIds.has(NO_TASK_SENTINEL);
+      return selectedTaskIds.has(msg.task_id);
+    });
+  }, [timelineItems, selectedTaskIds]);
+
+  const hasUntaggedMessages = useMemo(() => allMessages.some(m => !m.task_id), [allMessages]);
+
+  const totalPages = Math.ceil(filteredTimelineItems.length / PAGE_SIZE);
+  const paginatedItems = filteredTimelineItems.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
-  const paginatedMessages = paginatedItems
-    .filter((item): item is { kind: 'message'; data: Message } => item.kind === 'message')
-    .map(item => item.data);
-
   const loadSessionInfo = async () => {
     try {
       const res = await getSessionConfigs(project.id, sessionId);
@@ -323,16 +338,55 @@ export function MessagesPageClient({
     }
   };
 
+  const loadAllTasks = async () => {
+    try {
+      setIsLoadingTasks(true);
+      const tasks: Task[] = [];
+      let cursor: string | undefined = undefined;
+      let hasMore = true;
+      while (hasMore) {
+        const res = await getTasks(project.id, sessionId, 50, cursor);
+        tasks.push(...(res.items || []));
+        cursor = res.next_cursor;
+        hasMore = res.has_more || false;
+      }
+      setAllTasks(tasks.sort((a, b) => a.order - b.order));
+    } catch (error) {
+      console.error("Failed to load tasks:", error);
+    } finally {
+      setIsLoadingTasks(false);
+    }
+  };
+
   const handleRefreshMessages = async () => {
     setIsRefreshingMessages(true);
-    await loadAllMessages();
+    await Promise.all([loadAllMessages(), loadAllTasks()]);
     setIsRefreshingMessages(false);
+  };
+
+  const handleToggleTaskFilter = (taskId: string) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+    setCurrentPage(1);
+  };
+
+  const handleClearTaskFilter = () => {
+    setSelectedTaskIds(new Set());
+    setCurrentPage(1);
   };
 
   useEffect(() => {
     if (sessionId) {
       loadSessionInfo();
       loadAllMessages();
+      loadAllTasks();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
@@ -474,17 +528,53 @@ export function MessagesPageClient({
 
   const [isDownloading, setIsDownloading] = useState(false);
 
+  const getFilteredMessageIndices = (): Set<number> => {
+    const indices = new Set<number>();
+    allMessages.forEach((msg, idx) => {
+      if (!msg.task_id) {
+        if (selectedTaskIds.has(NO_TASK_SENTINEL)) indices.add(idx);
+      } else {
+        if (selectedTaskIds.has(msg.task_id)) indices.add(idx);
+      }
+    });
+    return indices;
+  };
+
+  const downloadJsonBlob = (data: string, filename: string) => {
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleDownload = async (format: "acontext" | "openai" | "anthropic" | "gemini") => {
     setIsDownloading(true);
     try {
-      const data = await downloadMessages(project.id, sessionId, format);
-      const blob = new Blob([data], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `messages-${sessionId}-${format}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const isFiltered = selectedTaskIds.size > 0;
+      const suffix = isFiltered ? "-filtered" : "";
+      const filename = `messages-${sessionId}${suffix}-${format}.json`;
+
+      if (isFiltered && format === "acontext") {
+        const filtered = allMessages.filter((msg) => {
+          if (!msg.task_id) return selectedTaskIds.has(NO_TASK_SENTINEL);
+          return selectedTaskIds.has(msg.task_id);
+        });
+        downloadJsonBlob(JSON.stringify(filtered, null, 2), filename);
+      } else if (isFiltered) {
+        const data = await downloadMessages(project.id, sessionId, format);
+        const parsed = JSON.parse(data);
+        const indices = getFilteredMessageIndices();
+        const filtered = Array.isArray(parsed)
+          ? parsed.filter((_: unknown, idx: number) => indices.has(idx))
+          : parsed;
+        downloadJsonBlob(JSON.stringify(filtered, null, 2), filename);
+      } else {
+        const data = await downloadMessages(project.id, sessionId, format);
+        downloadJsonBlob(data, filename);
+      }
       toast.success(`Downloaded messages in ${format} format`);
     } catch (error) {
       console.error("Failed to download messages:", error);
@@ -582,6 +672,64 @@ export function MessagesPageClient({
             </Button>
           </div>
         </div>
+
+        {(allTasks.length > 0 || hasUntaggedMessages || isLoadingTasks) && (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground mr-1">
+              <ListFilter className="h-4 w-4" />
+              <span>Filter by Task:</span>
+            </div>
+            {isLoadingTasks ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <>
+                <Button
+                  variant={selectedTaskIds.size === 0 ? "default" : "outline"}
+                  size="sm"
+                  onClick={handleClearTaskFilter}
+                  className="h-7 text-xs"
+                >
+                  All
+                </Button>
+                {allTasks.map((task) => {
+                  const isSelected = selectedTaskIds.has(task.id);
+                  const statusColor = task.status === "success" ? "bg-green-500"
+                    : task.status === "failed" ? "bg-red-500"
+                    : task.status === "running" ? "bg-yellow-500"
+                    : "bg-gray-400";
+                  return (
+                    <Button
+                      key={task.id}
+                      variant={isSelected ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handleToggleTaskFilter(task.id)}
+                      className="h-7 text-xs gap-1.5"
+                    >
+                      <span className={`inline-block h-2 w-2 rounded-full ${statusColor}`} />
+                      Task #{task.order}
+                    </Button>
+                  );
+                })}
+                {hasUntaggedMessages && (
+                  <Button
+                    variant={selectedTaskIds.has(NO_TASK_SENTINEL) ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleToggleTaskFilter(NO_TASK_SENTINEL)}
+                    className="h-7 text-xs"
+                  >
+                    No Task
+                  </Button>
+                )}
+              </>
+            )}
+            {selectedTaskIds.size > 0 && (
+              <span className="text-xs text-muted-foreground ml-2">
+                Showing {filteredTimelineItems.filter(i => i.kind === 'message').length} of {allMessages.length} messages
+                (filtered by {selectedTaskIds.size} {selectedTaskIds.size === 1 ? 'task' : 'tasks'})
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="rounded-md border overflow-hidden flex flex-col">
           {isLoadingMessages ? (

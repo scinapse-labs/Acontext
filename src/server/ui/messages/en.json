@@ -216,7 +216,12 @@
     "eventCreatedAt": "Event Created At",
     "download": "Download",
     "downloadSuccess": "Messages downloaded successfully",
-    "downloadFailed": "Failed to download messages"
+    "downloadFailed": "Failed to download messages",
+    "filterByTask": "Filter by Task:",
+    "allTasks": "All",
+    "noTask": "No Task",
+    "taskChipLabel": "Task #{order}",
+    "showingFiltered": "Showing {shown} of {total} messages (filtered by {count, plural, one {# task} other {# tasks}})"
   },
   "agentSkills": {
     "title": "Agent Skills",

@@ -216,7 +216,12 @@
     "eventCreatedAt": "事件创建时间",
     "download": "下载",
     "downloadSuccess": "消息下载成功",
-    "downloadFailed": "消息下载失败"
+    "downloadFailed": "消息下载失败",
+    "filterByTask": "按任务筛选：",
+    "allTasks": "全部",
+    "noTask": "无任务",
+    "taskChipLabel": "任务 #{order}",
+    "showingFiltered": "显示 {shown} / {total} 条消息（已按 {count} 个任务筛选）"
   },
   "agentSkills": {
     "title": "Agent Skills",

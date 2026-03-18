@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
@@ -42,9 +42,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Loader2, Plus, RefreshCw, Upload, X, ArrowLeft, FileText, Image as ImageIcon, Video, Music, File, Code, CheckCircle2, ExternalLink, Brain, ShieldOff, HardDrive, StickyNote, Flag, Download } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Upload, X, ArrowLeft, FileText, Image as ImageIcon, Video, Music, File, Code, CheckCircle2, ExternalLink, Brain, ShieldOff, HardDrive, StickyNote, Flag, Download, ListFilter } from "lucide-react";
 import Image from "next/image";
-import { getMessages, storeMessage, getSessionConfigs, downloadMessages } from "@/app/session/actions";
+import { getMessages, storeMessage, getSessionConfigs, downloadMessages, getTasks } from "@/app/session/actions";
 import {
   Message,
   SessionEvent,
@@ -54,6 +54,7 @@ import {
   UploadedFile,
   ToolCall,
   ToolResult,
+  Task,
 } from "@/types";
 import ReactCodeMirror from "@uiw/react-codemirror";
 import { okaidia } from "@uiw/codemirror-theme-okaidia";
@@ -71,6 +72,7 @@ import { Part } from "@/types";
 import { toast } from "sonner";
 
 const PAGE_SIZE = 10;
+const NO_TASK_SENTINEL = "__no_task__";
 
 // Component to render message content parts in table
 const MessageContentPreview = ({
@@ -237,29 +239,39 @@ export default function MessagesPage() {
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
   const [toolResults, setToolResults] = useState<ToolResult[]>([]);
 
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [messagePublicUrls, setMessagePublicUrls] = useState<
     Record<string, { url: string; expire_at: string }>
   >({});
 
-  // Build merged timeline of messages and events
-  const timelineItems: TimelineItem[] = [
+  const timelineItems = useMemo(() => [
     ...allMessages.map((m): TimelineItem => ({ kind: 'message', data: m })),
     ...allEvents.map((e): TimelineItem => ({ kind: 'event', data: e })),
-  ].sort((a, b) => new Date(a.data.created_at).getTime() - new Date(b.data.created_at).getTime());
+  ].sort((a, b) => new Date(a.data.created_at).getTime() - new Date(b.data.created_at).getTime()),
+  [allMessages, allEvents]);
 
-  const totalPages = Math.ceil(timelineItems.length / PAGE_SIZE);
-  const paginatedItems = timelineItems.slice(
+  const filteredTimelineItems = useMemo(() => {
+    if (selectedTaskIds.size === 0) return timelineItems;
+    return timelineItems.filter((item) => {
+      if (item.kind === 'event') return true;
+      const msg = item.data as Message;
+      if (!msg.task_id) return selectedTaskIds.has(NO_TASK_SENTINEL);
+      return selectedTaskIds.has(msg.task_id);
+    });
+  }, [timelineItems, selectedTaskIds]);
+
+  const hasUntaggedMessages = useMemo(() => allMessages.some(m => !m.task_id), [allMessages]);
+
+  const totalPages = Math.ceil(filteredTimelineItems.length / PAGE_SIZE);
+  const paginatedItems = filteredTimelineItems.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
-  // Keep paginatedMessages for backward compatibility with existing code
-  const paginatedMessages = paginatedItems
-    .filter((item): item is { kind: 'message'; data: Message } => item.kind === 'message')
-    .map(item => item.data);
-
-
   const loadSessionInfo = async () => {
     try {
       const res = await getSessionConfigs(sessionId);
@@ -320,16 +332,56 @@ export default function MessagesPage() {
     }
   };
 
+  const loadAllTasks = async () => {
+    try {
+      setIsLoadingTasks(true);
+      const tasks: Task[] = [];
+      let cursor: string | undefined = undefined;
+      let hasMore = true;
+      while (hasMore) {
+        const res = await getTasks(sessionId, 50, cursor);
+        if (res.code !== 0) break;
+        tasks.push(...(res.data?.items || []));
+        cursor = res.data?.next_cursor;
+        hasMore = res.data?.has_more || false;
+      }
+      setAllTasks(tasks.sort((a, b) => a.order - b.order));
+    } catch (error) {
+      console.error("Failed to load tasks:", error);
+    } finally {
+      setIsLoadingTasks(false);
+    }
+  };
+
   const handleRefreshMessages = async () => {
     setIsRefreshingMessages(true);
-    await loadAllMessages();
+    await Promise.all([loadAllMessages(), loadAllTasks()]);
     setIsRefreshingMessages(false);
+  };
+
+  const handleToggleTaskFilter = (taskId: string) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+    setCurrentPage(1);
+  };
+
+  const handleClearTaskFilter = () => {
+    setSelectedTaskIds(new Set());
+    setCurrentPage(1);
   };
 
   useEffect(() => {
     if (sessionId) {
       loadSessionInfo();
       loadAllMessages();
+      loadAllTasks();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
@@ -479,21 +531,61 @@ export default function MessagesPage() {
 
   const [isDownloading, setIsDownloading] = useState(false);
 
+  const getFilteredMessageIndices = (): Set<number> => {
+    const indices = new Set<number>();
+    allMessages.forEach((msg, idx) => {
+      if (!msg.task_id) {
+        if (selectedTaskIds.has(NO_TASK_SENTINEL)) indices.add(idx);
+      } else {
+        if (selectedTaskIds.has(msg.task_id)) indices.add(idx);
+      }
+    });
+    return indices;
+  };
+
+  const downloadJsonBlob = (data: string, filename: string) => {
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleDownload = async (format: "acontext" | "openai" | "anthropic" | "gemini") => {
     setIsDownloading(true);
     try {
-      const result = await downloadMessages(sessionId, format);
-      if (result.code !== 0 || !result.data) {
-        toast.error(t("downloadFailed"));
-        return;
+      const isFiltered = selectedTaskIds.size > 0;
+      const suffix = isFiltered ? "-filtered" : "";
+      const filename = `messages-${sessionId}${suffix}-${format}.json`;
+
+      if (isFiltered && format === "acontext") {
+        const filtered = allMessages.filter((msg) => {
+          if (!msg.task_id) return selectedTaskIds.has(NO_TASK_SENTINEL);
+          return selectedTaskIds.has(msg.task_id);
+        });
+        downloadJsonBlob(JSON.stringify(filtered, null, 2), filename);
+      } else if (isFiltered) {
+        const result = await downloadMessages(sessionId, format);
+        if (result.code !== 0 || !result.data) {
+          toast.error(t("downloadFailed"));
+          return;
+        }
+        const parsed = JSON.parse(result.data);
+        const indices = getFilteredMessageIndices();
+        const filtered = Array.isArray(parsed)
+          ? parsed.filter((_: unknown, idx: number) => indices.has(idx))
+          : parsed;
+        downloadJsonBlob(JSON.stringify(filtered, null, 2), filename);
+      } else {
+        const result = await downloadMessages(sessionId, format);
+        if (result.code !== 0 || !result.data) {
+          toast.error(t("downloadFailed"));
+          return;
+        }
+        downloadJsonBlob(result.data, filename);
       }
-      const blob = new Blob([result.data], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `messages-${sessionId}-${format}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
       toast.success(t("downloadSuccess"));
     } catch (error) {
       console.error("Failed to download messages:", error);
@@ -587,6 +679,67 @@ export default function MessagesPage() {
             </Button>
           </div>
         </div>
+
+        {(allTasks.length > 0 || hasUntaggedMessages || isLoadingTasks) && (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground mr-1">
+              <ListFilter className="h-4 w-4" />
+              <span>{t("filterByTask")}</span>
+            </div>
+            {isLoadingTasks ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <>
+                <Button
+                  variant={selectedTaskIds.size === 0 ? "default" : "outline"}
+                  size="sm"
+                  onClick={handleClearTaskFilter}
+                  className="h-7 text-xs"
+                >
+                  {t("allTasks")}
+                </Button>
+                {allTasks.map((task) => {
+                  const isSelected = selectedTaskIds.has(task.id);
+                  const statusColor = task.status === "success" ? "bg-green-500"
+                    : task.status === "failed" ? "bg-red-500"
+                    : task.status === "running" ? "bg-yellow-500"
+                    : "bg-gray-400";
+                  return (
+                    <Button
+                      key={task.id}
+                      variant={isSelected ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handleToggleTaskFilter(task.id)}
+                      className="h-7 text-xs gap-1.5"
+                    >
+                      <span className={`inline-block h-2 w-2 rounded-full ${statusColor}`} />
+                      {t("taskChipLabel", { order: task.order })}
+                    </Button>
+                  );
+                })}
+                {hasUntaggedMessages && (
+                  <Button
+                    variant={selectedTaskIds.has(NO_TASK_SENTINEL) ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleToggleTaskFilter(NO_TASK_SENTINEL)}
+                    className="h-7 text-xs"
+                  >
+                    {t("noTask")}
+                  </Button>
+                )}
+              </>
+            )}
+            {selectedTaskIds.size > 0 && (
+              <span className="text-xs text-muted-foreground ml-2">
+                {t("showingFiltered", {
+                  shown: filteredTimelineItems.filter(i => i.kind === 'message').length,
+                  total: allMessages.length,
+                  count: selectedTaskIds.size,
+                })}
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="rounded-md border overflow-hidden flex flex-col">
           {isLoadingMessages ? (

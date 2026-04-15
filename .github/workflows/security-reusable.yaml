@@ -104,7 +104,7 @@ jobs:
         run: npm audit --audit-level=high --omit=dev
       - name: Audit UI
         working-directory: src/server/ui
-        run: pnpm audit --audit-level=high --prod
+        run: pnpm audit --audit-level=high --prod --ignore-registry-errors
       - name: Audit Landing Page
         working-directory: landingpage
-        run: pnpm audit --audit-level=high --prod
+        run: pnpm audit --audit-level=high --prod --ignore-registry-errors
